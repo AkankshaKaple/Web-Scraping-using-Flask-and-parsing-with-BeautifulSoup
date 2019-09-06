@@ -1,24 +1,32 @@
 from bs4 import BeautifulSoup
 from googlesearch import search
-import pandas as pd
-import os
 import json
 from pymongo import MongoClient
-from flask import Flask, render_template
+from flask import Flask
 import requests
 from bson import ObjectId
 
 app = Flask(__name__)
 client = MongoClient()
-db = client.Database_new
-Company_Name_by_user = 'Niyo Solutions'
+db = client.F_Database
+Company_Name = 'Niyo Solutions'
+HTMLs = ['funding.html', 'jobs.html', 'linkedin.html', 'main.html',
+         'people.html', 'crunch_base.html']
+
+html_data = {}
+for html in HTMLs:
+    with open('HTML-file/niyo/' + html, 'r') as file:
+        data = file.read()
+    html_data[html.replace('.html', '')] = data
+
+print(html_data.keys())
+
+@app.route('/')
 
 
 @app.route('/jobs', methods=['GET', 'POST'])
 def jobs():
-    with open('HTML-file/niyo/jobs.html', 'r') as file:
-        data = file.read()
-    soup = BeautifulSoup(data, features="html.parser")
+    soup = BeautifulSoup(html_data['jobs'], features="html.parser")
     jobs = soup.findAll(class_='component_e6bd3 expanded_80d76')
     software_jos = [job.text for job in jobs if 'Software' in job.text]
     job_info = {}
@@ -33,20 +41,15 @@ def jobs():
                 Jobs['Title'] = job[0][:i + 1]
                 Jobs['Location'] = job[0][i + 1:]
                 break
-
         Jobs['Salary'] = job[1] + job[2]
         job_info['Job_' + str(index)] = Jobs
-
     return job_info
 
 
 @app.route('/company_details', methods=['GET', 'POST'])
 def company_details():
-    with open('HTML-file/niyo/main.html', 'r') as file:
-        data = file.read()
-    soup = BeautifulSoup(data, features="html.parser")
-    dict_1 = {}
-    dict_1['Detail'] = soup.find_all(class_='description_f92d0')[0].text
+    soup = BeautifulSoup(html_data['main'], features="html.parser")
+    dict_1 = {'Detail': soup.find_all(class_='description_f92d0')[0].text}
 
     area_of_interest = []
     for i in soup.find_all(class_='styles_component__3BR-y'):
@@ -59,12 +62,10 @@ def company_details():
 
 @app.route('/funding', methods=['GET', 'POST'])
 def funding():
-    with open('HTML-file/niyo/funding.html', 'r') as file:
-        data = file.read()
-    soup = BeautifulSoup(data, features="html.parser")
-    funding = {'Total_funding': soup.find(class_='component_43375').text.split(' ')[0].replace('Funding', '')[:-1],
-               'funding_rounds': soup.find(class_='component_43375').text.split(' ')[0].replace('Funding', '')[
-               -1:]}
+    soup = BeautifulSoup(html_data['funding'], features="html.parser")
+    fund = {'Total_funding': soup.find(class_='component_43375').text.split(' ')[0].replace('Funding', '')[:-1],
+            'funding_rounds': soup.find(class_='component_43375').text.split(' ')[0].replace('Funding', '')[
+                              -1:]}
 
     round_info = soup.findAll(class_='amountRaised_3c2b1')
     round_info.reverse()
@@ -72,26 +73,18 @@ def funding():
     j = 0
     for i in round_info:
         if round_list[j] == 'Seed':
-            funding[round_list[j]] = i.text
+            fund[round_list[j]] = i.text
             j += 1
         else:
-            funding['Round ' + round_list[j]] = i.text
+            fund['Round ' + round_list[j]] = i.text
             j += 1
 
-    return funding
-
-
-# def founders(soup):
-#     data = [i.text for i in soup.findAll(class_='__halo_textContrast_dark_AAAA')]
-#     founders = data[data.index('Founders') + 1: data.index('Team')]
-#     return founders
+    return fund
 
 
 @app.route('/crunch_base', methods=['GET', 'POST'])
 def crunch_base():
-    with open('HTML-file/NiYO Solutions _ Crunchbase.html', 'r') as file:
-        data = file.read()
-    soup = BeautifulSoup(data, features="html.parser")
+    soup = BeautifulSoup(html_data['crunch_base'], features="html.parser")
     parameters = ['Total Funding Amount', 'Number of Funding Rounds', 'Number of Lead Investors',
                   'Monthly Visits', 'Owler Estimated Revenue', 'Number of Current Team Members']
     keywords = ['Chief', 'Executive', 'Officer', 'Associate', 'President',
@@ -118,10 +111,7 @@ def crunch_base():
                 founder['Founder_' + str(index)] = f
                 index += 1
                 break
-
-    crunch_base_data = {}
-    crunch_base_data['Founder'] = founder
-    crunch_base_data['Company_Information'] = Company_Information
+    crunch_base_data = {'Founder': founder, 'Company_Information': Company_Information}
     crunch_base_data = json.dumps(crunch_base_data)
     return crunch_base_data
 
@@ -150,117 +140,106 @@ def get_domain_search():
                     'sourcePage': 'https://www.linkedin.com/in/vinayniyo/'}
     return contact_info
 
-@app.route('/print_data', methods=['POST', 'GET'])
-def print_data():
-    Company_Name_by_document = ''
-    cursor_1 = db.Company_Data.find()
-    for data_1 in cursor_1:
-        if Company_Name_by_user.lower() in data_1['Company_Name'].lower():
-            Company_Name_by_document = data_1['Company_Name']
-    cursor = db.Company_Data.find({'Company_Name': Company_Name_by_document})
-    data_list = []
-    data_list_1 = []
-    data_list_2 = []
-    data_list_3 = []
-    data_list_4 = []
-    data_list_5 = []
-    data_list_6 = []
-    data_list_7 = []
-    ref_id = ''
 
+@app.route('/print_data/<data_id>', methods=['POST', 'GET'])
+def print_data(data_id):
+    print('Print data')
+    Company_Name_by_document = ''
+    cursor_1 = db.Company_Data.find({'_id': ObjectId(data_id)})
+    for data_1 in cursor_1:
+        Company_Name_by_document = data_1['Company_Name']
+
+    print(Company_Name_by_document)
+
+    ref_id = ''
+    data_dict = {}
     # Company_Data
+    cursor = db.Company_Data.find({'Company_Name': Company_Name_by_document})
     for data in cursor:
         ref_id = data['_id']
+        # print(type(ref_id), type(data['_id']))
+        # print(ref_id, data['_id'])
         data['_id'] = str(data['_id'])
-        data_list_1.append(data)
-    data_list.append(data_list_1)
-    print(data_list)
+        data_dict['Company_Data'] = data
+        break
 
-    print('Company_Data')
 
     # Company_Information
-    cursor = db.Company_Information.find({'_id': ObjectId(ref_id)})
+    cursor = db.Company_Information.find({'Reference_id': str(ref_id)})
     for data in cursor:
+        print(type(ref_id), type(data['_id']))
         data['_id'] = str(data['_id'])
-        data_list_2.append(data)
-        print("data_list_2 : ", data_list_2)
-    data_list.append(data_list_2)
-    print('Company_Information')
+        data_dict['Company_Information'] = data
+        break
 
     # Contact_Person
-    cursor = db.Contact_Person.find({'_id': ObjectId(ref_id)})
+    cursor = db.Contact_Person.find({'Reference_id': str(ref_id)})
     for data in cursor:
         data['_id'] = str(data['_id'])
-        data_list_3.append(data)
-    data_list.append(data_list_3)
-    print('Contact_Person')
+        data_dict['Contact_Person'] = data
+        break
 
     # Founder
-    cursor = db.Founder.find({'_id': ObjectId(ref_id)})
+    cursor = db.Founder.find({'Reference_id': str(ref_id)})
     for data in cursor:
         data['_id'] = str(data['_id'])
-        data_list_4.append(data)
-    data_list.append(data_list_4)
-    print('Founder')
+        data_dict['Founder'] = data
+        break
 
     # Funding
-    cursor = db.Funding.find({'_id': ObjectId(ref_id)})
+    cursor = db.Funding.find({'Reference_id': str(ref_id)})
     for data in cursor:
         data['_id'] = str(data['_id'])
-        data_list_5.append(data)
-    data_list.append(data_list_5)
-    print('Funding')
+        data_dict['Funding'] = data
+        break
 
     # Jobs
-    cursor = db.Company_Information.find({'_id': ObjectId(ref_id)})
+    cursor = db.Company_Information.find({'Reference_id': str(ref_id)})
     for data in cursor:
         data['_id'] = str(data['_id'])
-        data_list_6.append(data)
-    data_list.append(data_list_6)
-
-    print('Jobs')
+        data_dict['Company_Information'] = data
+        break
 
     # URLs
-    cursor = db.URLs.find({'_id': ObjectId(ref_id)})
+    cursor = db.URLs.find({'Reference_id': str(ref_id)})
     for data in cursor:
         data['_id'] = str(data['_id'])
-        data_list_7.append(data)
-    data_list.append(data_list_7)
-    print('URLs')
-    return json.dumps(data_list)
-
-
-@app.route('/check_existing', methods=['POST', 'GET'])
-def check_existing():
-    print('Entered')
-    cursor_1 = db.Company_Data.find()
-    for data_1 in cursor_1:
-        if Company_Name_by_user.lower() in data_1['Company_Name'].lower():
-            res = requests.get('http://127.0.0.1:5000/print_data')
-            return json.loads(res.text)
+        data_dict['URLs'] = data
+        break
+    print(data_dict)
+    return json.dumps(data_dict)
 
 
 @app.route('/get_urls', methods=['GET', 'POST'])
 def get_urls():
-    Company_Name = ''
-
-    if 'Database_new' not in db.collection_names():
-        print('No Such Collection')
-    else:
-        res = requests.get('http://127.0.0.1:5000/check_existing')
-        Company_Name = json.loads(res.text)
-
-    print(Company_Name)
-    sites = ['LinkedIn', 'Angel_co', 'Tech_crunch', Company_Name]
+    sites = ['LinkedIn', 'Angel_co', 'Tech_crunch', 'Website']
     urls = {}
     for site in sites:
         query = Company_Name + site
         url_generator = search(query, tld="com", num=1, stop=1, pause=2)
         for url in url_generator:
-            if site == Company_Name:
-                urls['Website'] = url
-                break
             urls[site] = url
+    return json.dumps(urls)
+
+
+@app.route('/database', methods=['GET', 'POST'])
+def database():
+    # Get URLs of related to company
+    res = requests.get('http://127.0.0.1:5000/get_urls')
+    urls = json.loads(res.text)
+
+    print('Check if company data already exists in database')
+    cursor = db.Company_Data.find()
+    for data in cursor:
+        print(Company_Name.lower())
+        # check if company website already exists in database
+        if urls['Website'] == data['Website']:
+            data_id = str(data['_id'])
+            print('Company already exists in database')
+            res = requests.get('http://127.0.0.1:5000/print_data/'+data_id)
+            return json.loads(res.text)
+        else:
+            print('Company does not exist in database')
 
     # Contact_person
     res = requests.get('http://127.0.0.1:5000/get_domain_search')
@@ -277,10 +256,11 @@ def get_urls():
                             })
 
     # Get primary key for the document
-    cursor = db.Company_Data.find({'_id': contact_info['companyName']})
+    cursor = db.Company_Data.find({'Company_Name': contact_info['companyName']})
     reference_id = ''
     for data in cursor:
         reference_id = str(data['_id'])
+        break
 
     # urls_document
     urls['Reference_id'] = reference_id
@@ -314,9 +294,9 @@ def get_urls():
     funding = json.loads(res.text)
     funding['Reference_id'] = reference_id
     db.Funding.insert(funding)
-    print('Printing')
-    res = requests.get('http://127.0.0.1:5000/print_data')
+    res = requests.get('http://127.0.0.1:5000/print_data' + reference_id)
     return json.loads(res.text)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
