@@ -21,7 +21,10 @@ for html in HTMLs:
 
 print(html_data.keys())
 
-@app.route('/')
+
+# @app.route('/get_html', methonds=['POST'])
+# def get_html():
+#
 
 
 @app.route('/jobs', methods=['GET', 'POST'])
