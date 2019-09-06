@@ -12,7 +12,6 @@ app = Flask(__name__)
 client = MongoClient()
 db = client.Database_new
 Company_Name_by_user = 'Niyo Solutions'
-# objectId = ObjectId()
 
 
 @app.route('/jobs', methods=['GET', 'POST'])
