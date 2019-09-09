@@ -225,6 +225,14 @@ def get_urls():
     return json.dumps(urls)
 
 
+@app.route('/save_html/<key>/<html_value>', methods=['POST'])
+def save_html(key, html_value):
+    page_name = key.split('$')[1]
+    html_files = {page_name: html_value}
+    print(html_files)
+    return json.dumps(html_files)
+
+
 @app.route('/database', methods=['GET', 'POST'])
 def database():
     # Get URLs of related to company
