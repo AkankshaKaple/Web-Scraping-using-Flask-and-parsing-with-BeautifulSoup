@@ -7,7 +7,7 @@ from bson import ObjectId
 
 app = Flask(__name__)
 client = MongoClient()
-db = client.F_Database
+db = client.F_Database_3
 # Company_Name = 'Niyo Solutions'
 HTMLs = ['funding.html', 'jobs.html', 'linkedin.html', 'main.html',
          'people.html', 'crunch_base.html']
@@ -141,6 +141,16 @@ def contact_person(domain_name):
                     'lastName': 'Bagri',
                     'position': 'CEO and Co-founder',
                     'sourcePage': 'https://www.linkedin.com/in/vinayniyo/'}
+
+    # Contact_Person_document
+    db.Contact_Person.insert({'First_Name': contact_info['firstName'],
+                              'Last_Name': contact_info['lastName'],
+                              'Position': contact_info['position'],
+                              'LinkedIn_Profile': contact_info['sourcePage'],
+                              'Email': contact_info['email'],
+                              'Reference_id': '',
+                              'Company_Name': contact_info['companyName']
+                              })
     return contact_info
 
 
@@ -210,93 +220,107 @@ def print_data(data_id):
     return data_dict
 
 
-# Google library
-def get_urls(company_name):
-    sites = ['LinkedIn', 'Angel_co', 'Tech_crunch', 'Website']
-    urls = {}
-    for site in sites:
-        query = company_name + site
-        url_generator = search(query, tld="com", num=1, stop=1, pause=2)
-        for url in url_generator:
-            urls[site] = url
-    db.URLs.insert(urls)
-    return urls
-
-
 def available_data(data_dict, urls):
     angel = ["Round A", "Round B", "Round c", "Round D", "Seed", "Total_funding", "funding_rounds"]
     crunch_base = ["Area_of_interest", "Founder", "Company_Information"]
     linked_in = ['Employee', 'Location']
-    angel_data = {}
-    crunch_base_data = {}
+    angel_data = {'url': urls['Crunch_base'], 'data': {}}
+    crunch_base_data = {'url': urls['LinkedIn'], 'data': {}}
+    linked_in_data = {'url': urls['Angel_co'], 'data': {}}
     dict_2 = {}
-    linked_in_data = {}
     key_list = []
+
+    # combine keys of entire data
     for key in data_dict.keys():
         key_list = key_list + list(data_dict[key])
         dict_2 = {**dict_2, **data_dict[key]}
 
     for val in key_list:
         if val in angel:
-            angel_data[val] = dict_2[val]
+            angel_data['data'][val] = dict_2[val]
         if val in crunch_base:
-            crunch_base_data[val] = dict_2[val]
+            crunch_base_data['data'][val] = dict_2[val]
         if val in linked_in:
-            linked_in_data[val] = dict_2[val]
-
-        crunch_base_data['url'] = urls['Tech_crunch']
-        linked_in_data['url'] = urls['LinkedIn']
-        angel_data['url'] = urls['Angel_co']
-
-    return json.dumps({'crunch_base_data': crunch_base_data, 'angel_co_data': angel_data, 'linked_in_data': linked_in_data})
+            linked_in_data['data'][val] = dict_2[val]
+    return jsonify(
+        {'crunch_base_data': crunch_base_data, 'angel_co_data': angel_data, 'linked_in_data': linked_in_data})
 
 
-@app.route('/send_urls', methods=['GET', 'POST'])
-def send_urls(urls):
-    print('Check if company data already exists in database')
-    cursor = db.Company_Data.find()
-    for cursor_data in cursor:
-        # check if company website already exists in database
-        if urls['Website'] == cursor_data['Website']:
-            data_id = str(cursor_data['_id'])
-            print('Company already exists in database')
-            # Check if everything is present in the database
-            return available_data(print_data(data_id), urls)
-        else:
-            print('Company does not exist in database')
-            return available_data({}, urls)
-
-
-@app.route('/company_detail', methods=['POST'])
-def company_detail():
-    # Get URLs of related to company
+@app.route('/get_urls', methods=['POST'])
+def get_urls():
     company_name = request.form['company_name']
-    urls = get_urls(company_name)
+    sites = ['LinkedIn', 'Angel_co', 'Crunch_base', 'Website']
+    # urls = {}
+    # for site in sites:
+    #     query = company_name + site
+    #     url_generator = search(query, tld="com", num=1, stop=1, pause=2)
+    #     for url in url_generator:
+    #         urls[site] = url
+    # db.URLs.insert(urls)
+    urls = {"LinkedIn": "https://in.linkedin.com/company/niyo-solutions-inc",
+            "Angel_co": "https://angel.co/company/niyo-sol/jobs",
+            "Tech_crunch": "https://www.crunchbase.com/organization/niyo-solutions",
+            "Website": "https://www.goniyo.com/"}
+    contact_person(urls['Website'])
 
-    return send_urls(urls)
+    print('Check if company data already exists in database')
+    # check if table exists in database
+
+    collection = db.collection_names(include_system_collections=False)
+    flag = False
+    for collect in collection:
+        print(collect)
+        if 'Company_Data' != collect:
+            flag = False
+        else:
+            flag = True
+            break
+
+    if flag:
+        print(flag)
+        cursor = db.Company_Data.find()
+        for cursor_data in cursor:
+            # check if company website already exists in database
+            if urls['Website'] == cursor_data['Website']:
+                data_id = str(cursor_data['_id'])
+                print('Company already exists in database')
+                # Check if everything is present in the database
+                return available_data(print_data(data_id), urls)
+            else:
+                print('Company does not exist in database')
+                return available_data({}, urls)
+    else:
+        print(flag)
+        return available_data({}, urls)
 
 
-@app.route('/get_html_page', methods=['GET','POST'])
-def get_html_page():
-    # json_data = request.get_json()
-    # key = json_data['key']
-    # html_content = json_data['value']
-    # website = json_data['Website']
+@app.route('/get_html', methods=['GET', 'POST'])
+def get_html():
+    key = 'niyo_solutions$angel$funding'
     global urls
     website = "https://www.goniyo.com/"
     cursor = db.URLs.find({'Website': website})
     for i in cursor:
         urls = i
         break
+    key_data = key.strip().split('$')
+    Company_Name = key_data[0].split('_')[0] + ' ' + key_data[0].split('_')[1]  # Company name entered by the user
+    site = key_data[1]  # The site name (angel.co, crunch_base, linkedIn)
+    page = key_data[2]  # page : Page from the site (funding, jobs, etc.)
+    cursor = db.Company_Person.find()
+    for cursor_data in cursor:
+        if Company_Name in cursor_data['companyName']:
+            company_website = cursor_data['Website']
+            Company_Name = cursor_data['companyName']  # Full name of the company
 
     # Contact_person
-    contact_info = contact_person(urls['Website'])
+    # contact_info = contact_person(urls['Website'])
 
     # Company_detail
     company_info_ac = details(html_data['main'])
 
     # Company_Data
-    db.Company_Data.insert({'Website': urls['Website'],
+    db.Company_Data.insert({'Website': company_website,
                             "Company_Name": contact_info['companyName'],
                             'Area_of_interest': company_info_ac['Area_of_interest']
                             })
@@ -307,15 +331,6 @@ def get_html_page():
     for cursor_data in cursor:
         reference_id = str(cursor_data['_id'])
         break
-
-    # Contact_Person_document
-    db.Contact_Person.insert({'First_Name': contact_info['firstName'],
-                              'Last_Name': contact_info['lastName'],
-                              'Position': contact_info['position'],
-                              'LinkedIn_Profile': contact_info['sourcePage'],
-                              'Email': contact_info['email'],
-                              'Reference_id': reference_id
-                              })
 
     # Jobs_document
     jobs(html_data['jobs'], reference_id)
