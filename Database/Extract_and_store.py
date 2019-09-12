@@ -7,18 +7,7 @@ from bson import ObjectId
 
 app = Flask(__name__)
 client = MongoClient()
-db = client.F_Database_3
-# Company_Name = 'Niyo Solutions'
-HTMLs = ['funding.html', 'jobs.html', 'linkedin.html', 'main.html',
-         'people.html', 'crunch_base.html']
-
-html_data = {}
-for html in HTMLs:
-    with open('HTML-file/niyo/' + html, 'r') as file:
-        data = file.read()
-    html_data[html.replace('.html', '')] = data
-
-print(html_data.keys())
+db = client.My_Database
 
 
 # Angel.co
@@ -40,8 +29,10 @@ def jobs(html_page, reference_id):
                 break
         Jobs['Salary'] = job[1] + job[2]
         job_info['Job_' + str(index)] = Jobs
-    job_info['Reference_id'] = reference_id
-    db.Jobs.insert(job_info)
+
+    for key, val in job_info.items():
+        job_info[key]['Reference_id'] = reference_id
+        db.Job.insert(job_info[key])
     return job_info
 
 
@@ -76,7 +67,7 @@ def funding(html_page, reference_id):
         else:
             fund['Round ' + round_list[j]] = i.text
             j += 1
-
+    print(fund)
     fund['Reference_id'] = reference_id
     db.Funding.insert(fund)
     return fund
@@ -84,13 +75,15 @@ def funding(html_page, reference_id):
 
 # Crunch base
 def Founder(html_page, reference_id):
-    soup = BeautifulSoup(html_page, features="html.parser")
+    print(type(html_page))
+    soup = BeautifulSoup(html_page, 'html.parser')
     parameters = ['Total Funding Amount', 'Number of Funding Rounds', 'Number of Lead Investors',
                   'Monthly Visits', 'Owler Estimated Revenue', 'Number of Current Team Members']
     keywords = ['Chief', 'Executive', 'Officer', 'Associate', 'President',
                 'Technology Evangelist', 'Co-Founder', 'CoFounder', 'Founder']
 
     info = [i.text for i in soup.findAll(class_='even')]
+    print(info)
     Company_Information = {}
     founder = {}
     index = 0
@@ -112,11 +105,12 @@ def Founder(html_page, reference_id):
                 index += 1
                 break
     crunch_base_data = {'Founder': founder, 'Company_Information': Company_Information}
-    crunch_base_data['Founder']['Reference_id'] = reference_id
     crunch_base_data['Company_Information']['Reference_id'] = reference_id
-    db.Founder.insert(crunch_base_data['Founder'])
+    for key, val in crunch_base_data['Founder'].items():
+        crunch_base_data['Founder'][key]['Reference_id'] = reference_id
+        db.Founder.insert(crunch_base_data['Founder'][key])
     db.Company_Information.insert(crunch_base_data['Company_Information'])
-    return crunch_base_data
+    return "Founders Saved"
 
 
 # Snov io
@@ -148,8 +142,9 @@ def contact_person(domain_name):
                               'Position': contact_info['position'],
                               'LinkedIn_Profile': contact_info['sourcePage'],
                               'Email': contact_info['email'],
-                              'Reference_id': '',
-                              'Company_Name': contact_info['companyName']
+                              'Company_Name': contact_info['companyName'],
+                              'Website': 'https://www.goniyo.com/',
+                              'Reference_id': ''
                               })
     return contact_info
 
@@ -224,7 +219,7 @@ def available_data(data_dict, urls):
     angel = ["Round A", "Round B", "Round c", "Round D", "Seed", "Total_funding", "funding_rounds"]
     crunch_base = ["Area_of_interest", "Founder", "Company_Information"]
     linked_in = ['Employee', 'Location']
-    angel_data = {'url': urls['Crunch_base'], 'data': {}}
+    angel_data = {'url': urls['Tech_crunch'], 'data': {}}
     crunch_base_data = {'url': urls['LinkedIn'], 'data': {}}
     linked_in_data = {'url': urls['Angel_co'], 'data': {}}
     dict_2 = {}
@@ -246,11 +241,36 @@ def available_data(data_dict, urls):
         {'crunch_base_data': crunch_base_data, 'angel_co_data': angel_data, 'linked_in_data': linked_in_data})
 
 
+def linkedIn(html_page, reference_id):
+    soup = BeautifulSoup(html_page, 'html.parser')
+
+    # overview / description element extracted
+    overview_element = soup.find('p')
+
+    # extracting all fields headings
+    content_headings = [i.text.strip() for i in
+                        soup.find_all('dt', class_='org-page-details__definition-term t-14 t-black t-bold')]
+
+    # extracting all fields descriptions
+    content_elements = [i.text.strip() for i in
+                        soup.find_all('dd', class_='org-page-details__definition-text t-14 t-black--light t-normal')]
+
+    heading_and_elements = [i.text.strip().replace('\n', '') for i in soup.find_all(class_='overflow-hidden')]
+
+    contents = {'Company_Overview': overview_element.text.strip(), 'reference_id': reference_id}
+
+    data = [i.strip() for i in heading_and_elements[0].split('  ') if i != '']
+    for i in range(len(data) - 1):
+        if data[i] in content_headings:
+            contents[data[i]] = data[i + 1]
+    return contents
+
+
 @app.route('/get_urls', methods=['POST'])
-def get_urls():
+def send_urls():
     company_name = request.form['company_name']
-    sites = ['LinkedIn', 'Angel_co', 'Crunch_base', 'Website']
-    # urls = {}
+    sites = ['LinkedIn', 'Angel_co', 'Tech_crunch', 'Website']
+    urls = {}
     # for site in sites:
     #     query = company_name + site
     #     url_generator = search(query, tld="com", num=1, stop=1, pause=2)
@@ -261,7 +281,8 @@ def get_urls():
             "Angel_co": "https://angel.co/company/niyo-sol/jobs",
             "Tech_crunch": "https://www.crunchbase.com/organization/niyo-solutions",
             "Website": "https://www.goniyo.com/"}
-    contact_person(urls['Website'])
+
+    info = contact_person(urls['Website'])
 
     print('Check if company data already exists in database')
     # check if table exists in database
@@ -294,53 +315,78 @@ def get_urls():
         return available_data({}, urls)
 
 
-@app.route('/get_html', methods=['GET', 'POST'])
-def get_html():
-    key = 'niyo_solutions$angel$funding'
-    global urls
-    website = "https://www.goniyo.com/"
-    cursor = db.URLs.find({'Website': website})
-    for i in cursor:
-        urls = i
-        break
-    key_data = key.strip().split('$')
-    Company_Name = key_data[0].split('_')[0] + ' ' + key_data[0].split('_')[1]  # Company name entered by the user
-    site = key_data[1]  # The site name (angel.co, crunch_base, linkedIn)
-    page = key_data[2]  # page : Page from the site (funding, jobs, etc.)
-    cursor = db.Company_Person.find()
-    for cursor_data in cursor:
-        if Company_Name in cursor_data['companyName']:
-            company_website = cursor_data['Website']
-            Company_Name = cursor_data['companyName']  # Full name of the company
-
-    # Contact_person
-    # contact_info = contact_person(urls['Website'])
-
-    # Company_detail
-    company_info_ac = details(html_data['main'])
-
-    # Company_Data
-    db.Company_Data.insert({'Website': company_website,
-                            "Company_Name": contact_info['companyName'],
-                            'Area_of_interest': company_info_ac['Area_of_interest']
-                            })
-
-    # Get primary key for the document
-    cursor = db.Company_Data.find({'Company_Name': contact_info['companyName']})
+@app.route('/upload-file', methods=['POST'])
+def read_file():
+    # global contact_info, reference_id
+    global doc
     reference_id = ''
-    for cursor_data in cursor:
-        reference_id = str(cursor_data['_id'])
-        break
+    contact_info = {}
+    key = request.form['key']
+    html_page = request.files['html_data'].read().decode("utf-8")
+    website = request.form['website']
+    key = key.split('$')[1]
 
-    # Jobs_document
-    jobs(html_data['jobs'], reference_id)
+    cursor = db.Company_Data.find({'Website': website})
+    for document in cursor:
+        reference_id = str(document['_id'])
 
-    # Founders_document and Comp_info_document
-    founder = Founder(html_data['crunch_base'], reference_id)
+    if key == 'angel_co_funding':
+        funding(html_page, reference_id)
+        return "Funding Saved"
 
-    # funding_document
-    funding(html_data['funding'], reference_id)
-    return print_data(reference_id)
+    elif key == 'angel_co_jobs':
+        jobs(html_page, reference_id)
+        return "Jobs Saved"
+
+    elif key == 'angel_co_main':
+        cursor = db.Contact_Person.find({'Website': website})
+        for data in cursor:
+            print("data : ", data)
+            contact_info = data
+        company_info_ac = details(html_page)
+        db.Company_Data.insert({'Website': website,
+                                "Company_Name": contact_info['Company_Name'],
+                                'Area_of_interest': company_info_ac['Area_of_interest'],
+                                'Company size': '',
+                                'Headquarters': '',
+                                'Founded': ''
+                                })
+        cursor = db.Company_Data.find({'Website': website})
+        for c in cursor:
+            document = c
+            document['_id'] = str(document['_id'])
+
+        db.Contact_Person.update({"Website": website},
+                                 {"$set": {
+                                     "Reference id": document['_id']
+                                 }})
+        return jsonify(document)
+
+    # elif key == 'angel_co_people':
+    #     print('aa')
+    #     return "people"
+
+    elif key == 'crunch_base':
+        Founder(html_page, reference_id)
+        return "Founders Saved"
+
+    elif key == 'linkedin_about':
+        linkedIn_content = linkedIn(html_page, reference_id)
+        db.Company_Data.update({"_id": ObjectId(reference_id)},
+                               {"$set": {
+                                   "Company size": linkedIn_content["Company size"],
+                                   "Headquarters": linkedIn_content['Headquarters'],
+                                   "Founded": linkedIn_content['Founded']
+                               }})
+
+        cursor = db.Company_Data.find({"_id": ObjectId(reference_id)})
+        for doc in cursor:
+            doc['Reference_id'] = reference_id
+            doc['_id'] = str(doc['_id'])
+        return jsonify(doc)
+
+    else:
+        return "Oops, Input Valid Page"
 
 
 if __name__ == '__main__':
